@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, isSameDay, addMonths, subMonths, startOfDay } from 'date-fns';
 import { RiAddLine, RiDeleteBinLine, RiCheckLine, RiArrowLeftLine, RiArrowRightLine, RiGithubLine, RiExternalLinkLine, RiStickyNoteLine, RiTimeLine } from 'react-icons/ri';
 import api from '../../services/api';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 function fmt12(timeStr) {
   if (!timeStr) return '';
@@ -225,6 +226,7 @@ function TaskRow({ task, onToggle, onDelete }) {
 }
 
 export default function Planner() {
+  const { confirm, dialog } = useConfirm();
   const [mainTab, setMainTab] = useState('tasks');
   const [taskTab, setTaskTab] = useState('today');
   const [tasks, setTasks] = useState([]);
@@ -312,7 +314,8 @@ export default function Planner() {
   };
 
   const resetAll = async () => {
-    if (!window.confirm('Clear ALL tasks? This cannot be undone.')) return;
+    const ok = await confirm({ title: 'Clear All Tasks', message: 'This will permanently delete every task. This cannot be undone.', confirmLabel: 'Clear All', cancelLabel: 'Keep Tasks' });
+    if (!ok) return;
     await api.delete('/tasks/reset');
     toast.success('All tasks cleared');
     loadTasks();
@@ -325,20 +328,16 @@ export default function Planner() {
     return d;
   };
 
+  // All tasks for today regardless of status — done/missed stay visible in Tasks tab
   const todayTasks = tasks.filter(t => {
-    if (t.status === 'done' || t.status === 'missed') return false;
     const d = getDate(t);
     return !d || d === todayStr;
   });
 
   const completedTasks = tasks.filter(t => t.status === 'done');
 
-  const missedTasks = tasks.filter(t => {
-    if (t.status === 'missed') return true;
-    if (t.status !== 'todo') return false;
-    const d = getDate(t);
-    return d && d < todayStr;
-  });
+  // Not Done = only tasks the system explicitly marked missed (end_time passed)
+  const missedTasks = tasks.filter(t => t.status === 'missed');
 
   // Build schedule from today's tasks sorted by start_time
   const buildSchedule = () => {
@@ -443,8 +442,8 @@ export default function Planner() {
           ) : taskTab === 'today' ? (
             todayTasks.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-state-icon">✅</div>
-                <h3>No tasks for today!</h3>
+                <div className="empty-state-icon">📋</div>
+                <h3>No tasks for today yet</h3>
                 <p>Add tasks to plan your day.</p>
                 <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => setShowModal(true)}><RiAddLine /> Add Task</button>
               </div>
@@ -485,9 +484,11 @@ export default function Planner() {
       {mainTab === 'schedule' && (
         <div>
           <div className="glass-card" style={{ padding: '20px', marginBottom: 20 }}>
-            <p className="section-title" style={{ marginBottom: 4 }}>Today's Schedule</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <p className="section-title" style={{ margin: 0 }}>Today's Schedule</p>
+            </div>
             <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 16 }}>
-              {format(new Date(), 'EEEE, MMMM d, yyyy')} · Tasks with start/end times are sorted first; untimed tasks appear below.
+              {format(new Date(), 'EEEE, MMMM d, yyyy')} · All tasks shown — timed tasks sorted first. Status tag shown for each.
             </p>
 
             {schedule.length === 0 ? (
@@ -719,6 +720,7 @@ export default function Planner() {
       )}
 
       {showModal && <TaskModal onClose={() => setShowModal(false)} onSaved={loadTasks} />}
+      {dialog}
     </div>
   );
 }

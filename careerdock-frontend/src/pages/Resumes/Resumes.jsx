@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { RiUploadLine, RiDeleteBinLine, RiFileTextLine, RiCheckLine, RiSearchLine, RiLightbulbLine } from 'react-icons/ri';
 import api from '../../services/api';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 // ─── Animated circular score ──────────────────────────────────────────────────
 function ScoreCircle({ score }) {
@@ -137,6 +138,7 @@ function AtsModal({ resumes, defaultResumeId, onClose }) {
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 export default function Resumes() {
+  const { confirm, dialog } = useConfirm();
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -175,7 +177,8 @@ export default function Resumes() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this resume?')) return;
+    const ok = await confirm({ title: 'Delete Resume', message: 'This will permanently delete the resume file and its ATS score history. This cannot be undone.', confirmLabel: 'Delete', cancelLabel: 'Cancel' });
+    if (!ok) return;
     await api.delete(`/resumes/${id}`);
     toast.success('Deleted');
     load();
@@ -271,6 +274,7 @@ export default function Resumes() {
           onClose={() => { setShowAts(false); setQuickAnalyzeResume(null); }}
         />
       )}
+      {dialog}
     </div>
   );
 }

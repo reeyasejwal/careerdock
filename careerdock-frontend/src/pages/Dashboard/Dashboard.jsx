@@ -97,14 +97,13 @@ export default function Dashboard() {
     api.get('/dashboard/streak').then(r => setStreak(r.data)).catch(() => {});
     api.get('/dashboard/upcoming').then(r => {
       setUpcoming(r.data);
-      // Toast for rounds happening in ≤2 days
       const urgent = r.data.filter(round => {
-        const diff = Math.ceil((new Date(round.scheduled_at) - Date.now()) / 86400000);
-        return diff <= 2;
+        const days = daysUntil(round.scheduled_at);
+        return days !== null && days >= 0 && days <= 2;
       });
       urgent.slice(0, 3).forEach(round => {
-        const diff = Math.ceil((new Date(round.scheduled_at) - Date.now()) / 86400000);
-        const when = diff === 0 ? 'TODAY' : diff === 1 ? 'TOMORROW' : `in ${diff} days`;
+        const days = daysUntil(round.scheduled_at);
+        const when = days === 0 ? 'TODAY' : days === 1 ? 'TOMORROW' : `in ${days} days`;
         toast(`⏰ ${round.company_name} Round ${round.round_number} — ${when}!`, {
           duration: 5000,
           style: { background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', color: 'var(--text)' },
@@ -117,14 +116,20 @@ export default function Dashboard() {
     }
   }, []);
 
+  const daysUntil = (dt) => {
+    if (!dt) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const rd = new Date(dt); rd.setHours(0, 0, 0, 0);
+    return Math.round((rd - today) / 86400000);
+  };
+
   const fmtDate = (dt) => {
     if (!dt) return '—';
-    const d = new Date(dt);
-    const diff = Math.ceil((d - Date.now()) / 86400000);
-    if (diff === 0) return 'Today';
-    if (diff === 1) return 'Tomorrow';
-    if (diff > 0) return `in ${diff} days`;
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const days = daysUntil(dt);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+    if (days > 0) return `in ${days} days`;
+    return new Date(dt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
 
   const fmtFullDate = (dt) => {
@@ -136,9 +141,10 @@ export default function Dashboard() {
 
   const urgencyColor = (dt) => {
     if (!dt) return 'var(--primary)';
-    const diff = Math.ceil((new Date(dt) - Date.now()) / 86400000);
-    if (diff <= 2) return '#ef4444';
-    if (diff <= 5) return '#f97316';
+    const days = daysUntil(dt);
+    if (days === 0) return '#ef4444';
+    if (days <= 2) return '#f97316';
+    if (days <= 5) return '#eab308';
     return '#22c55e';
   };
 

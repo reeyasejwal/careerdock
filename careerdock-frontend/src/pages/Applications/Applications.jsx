@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { RiAddLine, RiEditLine, RiDeleteBinLine, RiStarFill, RiStarLine, RiSearchLine, RiMapPinLine, RiBriefcaseLine, RiMoneyDollarCircleLine, RiFilterLine, RiCloseLine } from 'react-icons/ri';
 import api from '../../services/api';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 const STATUSES = ['all','applied','in-process','offered','rejected'];
 const STATUS_COLOR = { applied:'badge-applied', 'in-process':'badge-in-process', offered:'badge-offered', rejected:'badge-rejected' };
@@ -111,6 +112,7 @@ function AppModal({ app, onClose, onSaved }) {
 }
 
 export default function Applications() {
+  const { confirm, dialog } = useConfirm();
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -132,7 +134,8 @@ export default function Applications() {
   useEffect(() => { load(); }, []);
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this application?')) return;
+    const ok = await confirm({ title: 'Delete Application', message: 'This will permanently remove the application and all its rounds. This cannot be undone.', confirmLabel: 'Delete', cancelLabel: 'Cancel' });
+    if (!ok) return;
     await api.delete(`/applications/${id}`);
     toast.success('Deleted');
     load();
@@ -287,10 +290,15 @@ export default function Applications() {
           )}
         </div>
       ) : (
-        <div className="app-grid">
-          <AnimatePresence>
-            {filtered.map((app, i) => (
-              <motion.div key={app.id} className={`glass-card app-card card-hover${app.is_important ? ' important' : ''}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: i * 0.04 }}>
+        <motion.div
+          className="app-grid"
+          key={filter + search + roleFilter + locationFilter + techFilter + pkgMin + pkgMax}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18 }}
+        >
+            {filtered.map((app) => (
+              <motion.div key={app.id} className={`glass-card app-card card-hover${app.is_important ? ' important' : ''}`} layout>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p className="app-card-company">{app.company_name}</p>
@@ -328,11 +336,11 @@ export default function Applications() {
                 </div>
               </motion.div>
             ))}
-          </AnimatePresence>
-        </div>
+        </motion.div>
       )}
 
       {showModal && <AppModal app={editApp} onClose={() => setShowModal(false)} onSaved={load} />}
+      {dialog}
     </div>
   );
 }

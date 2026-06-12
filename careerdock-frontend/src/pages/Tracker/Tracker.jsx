@@ -341,7 +341,12 @@ function TrackerCard({ app, onRefresh, expanded, onToggle }) {
                             ))}
                           </div>
                           {rounds.map(r => {
-                            const daysUntil = r.scheduled_at ? Math.ceil((new Date(r.scheduled_at) - Date.now()) / 86400000) : null;
+                            const daysUntil = (() => {
+                              if (!r.scheduled_at) return null;
+                              const today = new Date(); today.setHours(0, 0, 0, 0);
+                              const rd = new Date(r.scheduled_at); rd.setHours(0, 0, 0, 0);
+                              return Math.round((rd - today) / 86400000);
+                            })();
                             const isUpcomingFuture = r.status === 'upcoming' && daysUntil !== null && daysUntil >= 0;
                             return (
                             <div key={r.id} className="round-row">
@@ -349,9 +354,10 @@ function TrackerCard({ app, onRefresh, expanded, onToggle }) {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                   <p style={{ fontWeight: 600, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</p>
-                                  {isUpcomingFuture && daysUntil <= 1 && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(239,68,68,0.15)', color: '#ef4444', padding: '1px 6px', borderRadius: 4 }}>{daysUntil === 0 ? 'TODAY' : 'TOMORROW'}</span>}
-                                  {isUpcomingFuture && daysUntil > 1 && daysUntil <= 3 && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(249,115,22,0.12)', color: '#f97316', padding: '1px 6px', borderRadius: 4 }}>SOON</span>}
-                                  {isUpcomingFuture && daysUntil > 3 && daysUntil <= 7 && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(234,179,8,0.12)', color: '#ca8a04', padding: '1px 6px', borderRadius: 4 }}>THIS WEEK</span>}
+                                  {isUpcomingFuture && daysUntil === 0 && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(239,68,68,0.15)', color: '#ef4444', padding: '1px 6px', borderRadius: 4 }}>TODAY</span>}
+                                  {isUpcomingFuture && daysUntil === 1 && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(249,115,22,0.12)', color: '#f97316', padding: '1px 6px', borderRadius: 4 }}>TOMORROW</span>}
+                                  {isUpcomingFuture && daysUntil === 2 && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(249,115,22,0.12)', color: '#f97316', padding: '1px 6px', borderRadius: 4 }}>IN 2 DAYS</span>}
+                                  {isUpcomingFuture && daysUntil > 2 && daysUntil <= 7 && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(234,179,8,0.12)', color: '#ca8a04', padding: '1px 6px', borderRadius: 4 }}>IN {daysUntil} DAYS</span>}
                                 </div>
                                 {r.scheduled_at && <p style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(r.scheduled_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</p>}
                                 {r.notes && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.notes}</p>}

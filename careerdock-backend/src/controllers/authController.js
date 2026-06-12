@@ -5,9 +5,12 @@ const pool = require('../config/db');
 const sign = (id, email) =>
   jwt.sign({ id, email }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+
 exports.register = async (req, res) => {
   const { name, email, phone, password } = req.body;
   if (!name || !email || !password) return res.status(400).json({ message: 'Name, email and password required' });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ message: 'Invalid email address — please check for typos' });
   try {
     const [exists] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
     if (exists.length) return res.status(409).json({ message: 'Email already registered' });
@@ -77,16 +80,29 @@ exports.updatePassword = async (req, res) => {
 exports.deleteAccount = async (req, res) => {
   try {
     const userId = req.user.id;
-    // Delete all user data in dependency order
+
+    // 1. Leaf records that reference applications
     await pool.query('DELETE r FROM rounds r JOIN applications a ON r.application_id = a.id WHERE a.user_id = ?', [userId]);
     await pool.query('DELETE t FROM tracker_notes t WHERE t.application_id IN (SELECT id FROM applications WHERE user_id = ?)', [userId]);
     await pool.query('DELETE c FROM company_info c WHERE c.application_id IN (SELECT id FROM applications WHERE user_id = ?)', [userId]);
+
+    // 2. ATS scores reference resumes — must go before resumes
+    await pool.query('DELETE s FROM ats_scores s JOIN resumes r ON s.resume_id = r.id WHERE r.user_id = ?', [userId]).catch(() => {});
+
+    // 3. Parent records
     await pool.query('DELETE FROM applications WHERE user_id = ?', [userId]);
     await pool.query('DELETE FROM resumes WHERE user_id = ?', [userId]);
     await pool.query('DELETE FROM tasks WHERE user_id = ?', [userId]);
+    await pool.query('DELETE FROM chat_conversations WHERE user_id = ?', [userId]).catch(() => {});
+    await pool.query('DELETE FROM calendar_events WHERE user_id = ?', [userId]).catch(() => {});
+    await pool.query('DELETE FROM activity_log WHERE user_id = ?', [userId]).catch(() => {});
+    await pool.query('DELETE FROM badges WHERE user_id = ?', [userId]).catch(() => {});
+
+    // 4. User row last
     await pool.query('DELETE FROM users WHERE id = ?', [userId]);
     res.json({ message: 'Account deleted' });
   } catch (err) {
+    console.error('[deleteAccount] error:', err.message);
     res.status(500).json({ message: err.message });
   }
 };

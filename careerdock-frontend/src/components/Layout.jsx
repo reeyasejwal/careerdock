@@ -12,6 +12,14 @@ import {
   RiPaletteLine, RiSunLine, RiMoonLine, RiNotification3Line
 } from 'react-icons/ri';
 
+const getDaysUntil = (scheduledAt) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const roundDate = new Date(scheduledAt);
+  roundDate.setHours(0, 0, 0, 0);
+  return Math.round((roundDate - today) / 86400000);
+};
+
 const NAV = [
   { section: 'MAIN', items: [
     { to: '/dashboard',     icon: RiDashboardLine, label: 'Dashboard' },
@@ -47,8 +55,8 @@ export default function Layout() {
   useEffect(() => {
     api.get('/dashboard/upcoming').then(r => {
       const urgent = r.data.filter(round => {
-        const diff = Math.ceil((new Date(round.scheduled_at) - Date.now()) / 86400000);
-        return diff <= 2;
+        const days = getDaysUntil(round.scheduled_at);
+        return days >= 0 && days <= 2;
       });
       setUrgentRounds(urgent);
     }).catch(() => {});
@@ -191,11 +199,11 @@ export default function Layout() {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
             <div
               className="user-card"
               onClick={() => { setPopupOpen(p => !p); setShowThemePicker(false); setShowLogoutConfirm(false); }}
-              style={{ cursor: 'pointer', userSelect: 'none', flex: 1 }}
+              style={{ cursor: 'pointer', userSelect: 'none', flex: 1, minWidth: 0 }}
               title="Account options"
             >
               <div className="user-avatar">{initial}</div>
@@ -207,7 +215,7 @@ export default function Layout() {
             <button
               onClick={() => { setShowLogoutConfirm(true); setPopupOpen(true); setShowThemePicker(false); }}
               title="Sign Out"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '6px', borderRadius: 8, transition: 'color 0.2s', flexShrink: 0 }}
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '6px 4px', borderRadius: 8, transition: 'color 0.2s', flexShrink: 0 }}
               onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
               onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
             >
@@ -240,16 +248,16 @@ export default function Layout() {
               {urgentRounds.length === 0 ? (
                 <p style={{ padding: '14px 16px', fontSize: 13, color: 'var(--muted)' }}>No urgent rounds in the next 2 days.</p>
               ) : urgentRounds.map(r => {
-                const diff = Math.ceil((new Date(r.scheduled_at) - Date.now()) / 86400000);
+                const days = getDaysUntil(r.scheduled_at);
+                const label = days === 0 ? 'TODAY' : days === 1 ? 'TOMORROW' : `IN ${days} DAYS`;
+                const color = days === 0 ? '#ef4444' : '#f97316';
                 return (
                   <div key={r.id} style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{r.company_name}</p>
                       <p style={{ fontSize: 11.5, color: 'var(--muted)' }}>Round {r.round_number} · {r.category}</p>
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: diff === 0 ? '#ef4444' : '#f97316' }}>
-                      {diff === 0 ? 'TODAY' : 'TOMORROW'}
-                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color }}>{label}</span>
                   </div>
                 );
               })}
