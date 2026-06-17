@@ -1,5 +1,10 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+
+['uploads/resumes', 'uploads/jd-files'].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
 
 const resumeStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/resumes/'),
