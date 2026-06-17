@@ -9,22 +9,15 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// resource_type:'raw' handles any file type; file filtering is done by multer's fileFilter below
 const resumeStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: 'careerdock/resumes',
-    resource_type: 'raw',
-    allowed_formats: ['pdf', 'doc', 'docx'],
-  },
+  params: { folder: 'careerdock/resumes', resource_type: 'raw' },
 });
 
 const jdStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: 'careerdock/jd-files',
-    resource_type: 'raw',
-    allowed_formats: ['pdf', 'doc', 'docx', 'txt'],
-  },
+  params: { folder: 'careerdock/jd-files', resource_type: 'raw' },
 });
 
 exports.uploadResume = multer({
