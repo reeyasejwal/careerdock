@@ -2,8 +2,13 @@ const pool = require('../config/db');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const https = require('https');
+const http = require('http');
 
 const SERVER_ROOT = path.join(__dirname, '../..');
+
+// Ensure cloudinary_public_id column exists on resumes table
+pool.query("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS cloudinary_public_id VARCHAR(500)").catch(() => {});
 
 // Ensure ats_scores table has content_hash column
 pool.query(`CREATE TABLE IF NOT EXISTS ats_scores (
@@ -16,31 +21,40 @@ pool.query(`CREATE TABLE IF NOT EXISTS ats_scores (
 )`).catch(() => {});
 pool.query("ALTER TABLE ats_scores ADD COLUMN IF NOT EXISTS content_hash VARCHAR(32) NOT NULL DEFAULT ''").catch(() => {});
 
+const fetchBuffer = (url) => new Promise((resolve, reject) => {
+  const protocol = url.startsWith('https') ? https : http;
+  protocol.get(url, (res) => {
+    const chunks = [];
+    res.on('data', c => chunks.push(c));
+    res.on('end', () => resolve(Buffer.concat(chunks)));
+    res.on('error', reject);
+  }).on('error', reject);
+});
+
 const extractText = async (row) => {
-  const filePath = path.join(SERVER_ROOT, row.file_url.replace(/^\//, ''));
-  console.log('[ATS] file_url:', row.file_url);
-  console.log('[ATS] resolved path:', filePath);
-  console.log('[ATS] file exists:', fs.existsSync(filePath));
+  const fileUrl = row.file_url;
+  let dataBuffer;
 
-  if (!fs.existsSync(filePath)) {
-    console.error('[ATS] File not found:', filePath);
-    return '';
+  if (fileUrl && fileUrl.startsWith('http')) {
+    try {
+      dataBuffer = await fetchBuffer(fileUrl);
+    } catch (e) {
+      console.error('[ATS] Failed to fetch from Cloudinary:', e.message);
+      return '';
+    }
+  } else {
+    const filePath = path.join(SERVER_ROOT, (fileUrl || '').replace(/^\//, ''));
+    if (!fs.existsSync(filePath)) return '';
+    dataBuffer = fs.readFileSync(filePath);
   }
 
-  const ext = (row.file_type || path.extname(filePath).slice(1)).toLowerCase();
-  if (ext !== 'pdf') {
-    console.log('[ATS] Not a PDF, file_type:', ext);
-    return '';
-  }
+  const ext = (row.file_type || path.extname(fileUrl).slice(1)).toLowerCase();
+  if (ext !== 'pdf') return '';
 
   try {
     const pdfParse = require('pdf-parse');
-    const dataBuffer = fs.readFileSync(filePath);
     const data = await pdfParse(dataBuffer);
-    const text = (data.text || '').trim();
-    console.log('[ATS] extracted text length:', text.length);
-    console.log('[ATS] first 200 chars:', text.substring(0, 200));
-    return text;
+    return (data.text || '').trim();
   } catch (e) {
     console.error('[ATS] pdf-parse error:', e.message);
     return '';
@@ -80,13 +94,12 @@ function ruleBasedAnalysis(resumeText) {
   const hasExp      = /internship|intern\b|work experience/i.test(resumeText);
   const hasAchiev   = /achievement|award|certificate|hackathon/i.test(resumeText);
 
-  // Scoring — sections weighted most heavily (+7 each), everything else continuous
-  const sectionScore = sectionCount * 7;                                                    // max 49
-  const verbScore    = verbCount === 0 ? 0 : Math.min(12, Math.round(Math.sqrt(verbCount) * 2.5)); // max 12
-  const techScore    = techCount  === 0 ? 0 : Math.min(10, Math.round(Math.log(techCount + 1) * 2.8)); // max 10
-  const metricScore  = Math.min(8, Math.round(metricCount * 1.5));                          // max 8
-  const contactScore = (hasEmail?2:0) + (hasGithub?1:0) + (hasLinkedin?1:0) + (hasPhone?0.5:0); // max 4.5
-  const extrasScore  = (hasCgpa?2:0) + (hasLeetcode?2:0) + (hasExp?2:0) + (hasAchiev?2:0); // max 8
+  const sectionScore = sectionCount * 7;
+  const verbScore    = verbCount === 0 ? 0 : Math.min(12, Math.round(Math.sqrt(verbCount) * 2.5));
+  const techScore    = techCount  === 0 ? 0 : Math.min(10, Math.round(Math.log(techCount + 1) * 2.8));
+  const metricScore  = Math.min(8, Math.round(metricCount * 1.5));
+  const contactScore = (hasEmail?2:0) + (hasGithub?1:0) + (hasLinkedin?1:0) + (hasPhone?0.5:0);
+  const extrasScore  = (hasCgpa?2:0) + (hasLeetcode?2:0) + (hasExp?2:0) + (hasAchiev?2:0);
 
   let wordScore = 0;
   if      (wordCount >= 420 && wordCount <= 680) wordScore = 4;
@@ -120,7 +133,6 @@ function ruleBasedAnalysis(resumeText) {
     : score >= 88 ? 'Near-perfect structure — tailor keywords to each specific job description for best results.'
     : 'Well-rounded resume — keep quantifying your project impact to stand out further.';
 
-  // Build strengths / weaknesses / improvements / missingSections
   const strengths = [];
   if (sectionCount >= 6) strengths.push(`Comprehensive structure — ${sectionCount}/7 key sections present`);
   if (techCount >= 10) strengths.push(`Strong technical depth — ${techCount} tech keywords found`);
@@ -228,11 +240,12 @@ exports.upload = async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   const { version_name } = req.body;
   try {
-    const fileUrl = `/uploads/resumes/${req.file.filename}`;
+    const fileUrl = req.file.path;           // Cloudinary secure URL
+    const publicId = req.file.filename;      // Cloudinary public_id
     const ext = path.extname(req.file.originalname).slice(1).toLowerCase();
     const [r] = await pool.query(
-      'INSERT INTO resumes (user_id, version_name, file_url, file_type) VALUES (?,?,?,?)',
-      [req.user.id, version_name || req.file.originalname, fileUrl, ext]
+      'INSERT INTO resumes (user_id, version_name, file_url, file_type, cloudinary_public_id) VALUES (?,?,?,?,?)',
+      [req.user.id, version_name || req.file.originalname, fileUrl, ext, publicId]
     );
     res.status(201).json({ id: r.insertId, file_url: fileUrl, message: 'Uploaded' });
   } catch (err) {
@@ -242,10 +255,20 @@ exports.upload = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT file_url FROM resumes WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
+    const [rows] = await pool.query('SELECT file_url, cloudinary_public_id FROM resumes WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
     if (!rows.length) return res.status(404).json({ message: 'Not found' });
-    const filePath = path.join(SERVER_ROOT, rows[0].file_url.replace(/^\//, ''));
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const { file_url, cloudinary_public_id } = rows[0];
+
+    if (cloudinary_public_id) {
+      try {
+        const cloudinary = require('cloudinary').v2;
+        await cloudinary.uploader.destroy(cloudinary_public_id, { resource_type: 'raw' });
+      } catch {}
+    } else if (file_url && !file_url.startsWith('http')) {
+      const filePath = path.join(SERVER_ROOT, file_url.replace(/^\//, ''));
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
     await pool.query('DELETE FROM resumes WHERE id=?', [req.params.id]);
     res.json({ message: 'Deleted' });
   } catch (err) {
@@ -272,7 +295,6 @@ exports.atsScore = async (req, res) => {
     const resume = rows[0];
 
     const resumeText = await extractText(resume);
-    console.log('[ATS] text length:', resumeText.length, 'for:', resume.version_name);
 
     if (!resumeText || resumeText.length < 50) {
       return res.status(400).json({
@@ -282,7 +304,6 @@ exports.atsScore = async (req, res) => {
       });
     }
 
-    // Hash-based cache: different resume content always gets a fresh score
     const contentHash = crypto.createHash('md5').update(resumeText).digest('hex');
     try {
       const [cached] = await pool.query(
@@ -290,18 +311,15 @@ exports.atsScore = async (req, res) => {
         [resumeId, contentHash]
       );
       if (cached.length) {
-        console.log('[ATS] cache hit (same content hash) for:', resume.version_name);
         return res.json({ ...JSON.parse(cached[0].result_json), cached: true });
       }
-    } catch {} // table may not exist yet — proceed to analyze
+    } catch {}
 
     let analysis = await aiAnalysis(resumeText, resume.version_name);
     if (!analysis) {
-      console.log('[ATS] AI failed, using rule-based for:', resume.version_name);
       analysis = ruleBasedAnalysis(resumeText);
     }
 
-    // Store with content hash so two different resumes never share a cached score
     try {
       await pool.query(
         `INSERT INTO ats_scores (resume_id, content_hash, result_json)
@@ -309,7 +327,7 @@ exports.atsScore = async (req, res) => {
          ON DUPLICATE KEY UPDATE content_hash=VALUES(content_hash), result_json=VALUES(result_json)`,
         [resumeId, contentHash, JSON.stringify(analysis)]
       );
-    } catch {} // best-effort
+    } catch {}
 
     res.json({ ...analysis, cached: false });
   } catch (err) {

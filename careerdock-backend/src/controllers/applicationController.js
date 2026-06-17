@@ -56,7 +56,7 @@ exports.create = async (req, res) => {
   const { company_name, role, package_lpa, location, tech_stack, jd_text, applied_date } = req.body;
   if (!company_name) return res.status(400).json({ message: 'Company name required' });
   try {
-    const jdFile = req.file ? `/uploads/jd-files/${req.file.filename}` : null;
+    const jdFile = req.file ? req.file.path : null;
     const stackJson = JSON.stringify(tech_stack ? (typeof tech_stack === 'string' ? JSON.parse(tech_stack) : tech_stack) : []);
     const [r] = await pool.query(
       'INSERT INTO applications (user_id, company_name, role, package_lpa, location, tech_stack, jd_text, jd_file_url, applied_date) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -83,7 +83,7 @@ exports.update = async (req, res) => {
     const [existing] = await pool.query('SELECT id FROM applications WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
     if (!existing.length) return res.status(404).json({ message: 'Not found' });
     const stackJson = tech_stack !== undefined ? JSON.stringify(typeof tech_stack === 'string' ? JSON.parse(tech_stack) : tech_stack) : undefined;
-    const jdFile = req.file ? `/uploads/jd-files/${req.file.filename}` : undefined;
+    const jdFile = req.file ? req.file.path : undefined;
     const fields = ['company_name=?','role=?','package_lpa=?','location=?','applied_date=?'];
     const vals = [company_name, role || null, package_lpa || null, location || null, applied_date || null];
     if (jd_text !== undefined) { fields.push('jd_text=?'); vals.push(jd_text); }
@@ -140,20 +140,40 @@ exports.getJdText = async (req, res) => {
     const app = rows[0];
     if (app.jd_text) return res.json({ text: app.jd_text, source: 'text' });
     if (app.jd_file_url) {
-      const filePath = path.join(SERVER_ROOT, app.jd_file_url.replace(/^\//, ''));
-      if (!fs.existsSync(filePath)) {
-        return res.json({ text: '', source: 'file_missing' });
+      let dataBuffer;
+      const url = app.jd_file_url;
+
+      if (url.startsWith('http')) {
+        try {
+          const https = require('https');
+          const httpModule = require('http');
+          const protocol = url.startsWith('https') ? https : httpModule;
+          dataBuffer = await new Promise((resolve, reject) => {
+            protocol.get(url, (r) => {
+              const chunks = [];
+              r.on('data', c => chunks.push(c));
+              r.on('end', () => resolve(Buffer.concat(chunks)));
+              r.on('error', reject);
+            }).on('error', reject);
+          });
+        } catch {
+          return res.json({ text: '', source: 'file_missing' });
+        }
+      } else {
+        const filePath = path.join(SERVER_ROOT, url.replace(/^\//, ''));
+        if (!fs.existsSync(filePath)) {
+          return res.json({ text: '', source: 'file_missing' });
+        }
+        dataBuffer = fs.readFileSync(filePath);
       }
+
       try {
         const pdfParse = require('pdf-parse');
-        const dataBuffer = fs.readFileSync(filePath);
-        // First attempt: standard extraction
         let text = '';
         try {
           const data = await pdfParse(dataBuffer);
           text = data.text?.trim() || '';
         } catch {}
-        // Second attempt: custom pagerender
         if (!text || text.length < 30) {
           try {
             const data = await pdfParse(dataBuffer, {
@@ -169,7 +189,6 @@ exports.getJdText = async (req, res) => {
         if (text && text.length >= 30) {
           return res.json({ text, source: 'pdf' });
         }
-        // Scanned PDF fallback
         return res.json({ text: '', source: 'scanned_pdf' });
       } catch (e) {
         return res.json({ text: '', source: 'pdf_error' });
