@@ -25,7 +25,13 @@ app.use('/api/auth/', rateLimit({
   message: { message: 'Too many login attempts. Please wait 15 minutes.' },
 }));
 
-app.use(cors({ origin: /^http:\/\/localhost(:\d+)?$/, credentials: true }));
+app.use(cors({
+  origin: [
+    /^http:\/\/localhost(:\d+)?$/,
+    'https://careerdock-eight.vercel.app',
+  ],
+  credentials: true,
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
