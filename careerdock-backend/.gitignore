@@ -36,6 +36,7 @@ build/
 node_modules/
 .env
 .env.*
+ca.pem
 
 ### Uploads & logs ###
 uploads/
