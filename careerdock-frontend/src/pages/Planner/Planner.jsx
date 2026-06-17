@@ -316,9 +316,13 @@ export default function Planner() {
   const resetAll = async () => {
     const ok = await confirm({ title: 'Clear All Tasks', message: 'This will permanently delete every task. This cannot be undone.', confirmLabel: 'Clear All', cancelLabel: 'Keep Tasks' });
     if (!ok) return;
-    await api.delete('/tasks/reset');
-    toast.success('All tasks cleared');
-    loadTasks();
+    try {
+      await api.delete('/tasks/reset');
+      toast.success('All tasks cleared');
+      loadTasks();
+    } catch {
+      toast.error('Failed to clear tasks');
+    }
   };
 
   const todayStr = new Date().toISOString().slice(0, 10);

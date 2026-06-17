@@ -128,7 +128,7 @@ export default function Applications() {
 
   const load = () => {
     setLoading(true);
-    api.get('/applications').then(r => setApps(r.data)).finally(() => setLoading(false));
+    api.get('/applications').then(r => setApps(r.data)).catch(() => toast.error('Failed to load applications')).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
@@ -136,14 +136,22 @@ export default function Applications() {
   const handleDelete = async (id) => {
     const ok = await confirm({ title: 'Delete Application', message: 'This will permanently remove the application and all its rounds. This cannot be undone.', confirmLabel: 'Delete', cancelLabel: 'Cancel' });
     if (!ok) return;
-    await api.delete(`/applications/${id}`);
-    toast.success('Deleted');
-    load();
+    try {
+      await api.delete(`/applications/${id}`);
+      toast.success('Deleted');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete');
+    }
   };
 
   const toggleImportant = async (app) => {
-    await api.patch(`/applications/${app.id}/important`);
-    load();
+    try {
+      await api.patch(`/applications/${app.id}/important`);
+      load();
+    } catch {
+      toast.error('Failed to update');
+    }
   };
 
   const hasActiveFilters = pkgMin || pkgMax || locationFilter || roleFilter || techFilter;

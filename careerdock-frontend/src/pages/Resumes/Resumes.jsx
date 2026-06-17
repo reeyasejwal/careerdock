@@ -254,7 +254,7 @@ export default function Resumes() {
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                 {!r.is_active && <button className="btn btn-outline btn-sm" onClick={() => setActive(r.id)}>Set Active</button>}
-                <a href={`http://localhost:5000${r.file_url}`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">Open</a>
+                <a href={r.file_url?.startsWith('http') ? r.file_url : `${(import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '')}${r.file_url}`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">Open</a>
                 <button className="btn btn-outline btn-sm" onClick={() => openAnalysis(r)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <RiLightbulbLine size={13} /> Analyze
                 </button>

@@ -465,7 +465,7 @@ function TrackerCard({ app, onRefresh, expanded, onToggle }) {
                   )}
 
                   {app.jd_file_url && !pasteJdMode && (
-                    <a href={`http://localhost:5000${app.jd_file_url}`} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm" style={{ marginTop: 8, display: 'inline-flex' }}><RiFileTextLine /> View JD File</a>
+                    <a href={app.jd_file_url?.startsWith('http') ? app.jd_file_url : `${(import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '')}${app.jd_file_url}`} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm" style={{ marginTop: 8, display: 'inline-flex' }}><RiFileTextLine /> View JD File</a>
                   )}
                 </div>
               )}
