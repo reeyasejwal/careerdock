@@ -22,7 +22,11 @@ exports.register = async (req, res) => {
     const token = sign(r.insertId, email);
     res.status(201).json({ token, id: r.insertId, name, email });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[register] FAILED');
+    console.error('[register] code:', err.code);
+    console.error('[register] sqlState:', err.sqlState);
+    console.error('[register] message:', err.message);
+    res.status(500).json({ message: err.message, code: err.code });
   }
 };
 

@@ -17,4 +17,16 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
+// Test connection at startup so Render logs show DB status immediately
+pool.getConnection()
+  .then(conn => {
+    console.log('[DB] MySQL connected successfully');
+    conn.release();
+  })
+  .catch(err => {
+    console.error('[DB] MySQL connection FAILED');
+    console.error('[DB] code:', err.code);
+    console.error('[DB] message:', err.message);
+  });
+
 module.exports = pool;
